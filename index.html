@@ -2,14 +2,15 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Google Sheet Live Data</title>
+<title>Live IoT Dashboard Data</title>
 <style>
-  body { font-family: Arial, sans-serif; margin: 20px; }
-  h2 { text-align: center; }
+  body { font-family: Arial, sans-serif; margin: 20px; background: #f5f8ff; }
+  h2 { text-align: center; color: #003d99; }
   table {
     width: 100%;
     border-collapse: collapse;
     margin-top: 20px;
+    background: white;
   }
   th, td {
     border: 1px solid #444;
@@ -20,6 +21,7 @@
     background: #0073e6;
     color: #fff;
   }
+  tr:nth-child(even) { background: #eef5ff; }
 </style>
 </head>
 <body>
@@ -29,34 +31,59 @@
 
 <script>
 const sheetID = "1xfkdl2oWvB-HSpLBRwjj31YBCb-YDTUhjTJhVnW2o_g"; 
-const sheetName = "Sheet1"; // Change if your tab name is different
+const sheetName = "Sheet1";  // Update if your sheet tab name is different
 const apiURL = `https://docs.google.com/spreadsheets/d/${sheetID}/gviz/tq?tqx=out:json&sheet=${sheetName}`;
 
-fetch(apiURL)
-  .then(res => res.text())
-  .then(text => {
-    const json = JSON.parse(text.substr(47).slice(0, -2));
-    const table = document.getElementById("dataTable");
+function loadData() {
+  fetch(apiURL)
+    .then(res => res.text())
+    .then(text => {
+      const json = JSON.parse(text.substring(47).slice(0, -2));
+      const table = document.getElementById("dataTable");
 
-    let tableHTML = "<tr>";
-    json.table.cols.forEach(col => {
-      tableHTML += `<th>${col.label}</th>`;
-    });
-    tableHTML += "</tr>";
-
-    json.table.rows.forEach(row => {
-      tableHTML += "<tr>";
-      row.c.forEach(cell => {
-        tableHTML += `<td>${cell ? cell.v : ""}</td>`;
+      let tableHTML = "<tr>";
+      json.table.cols.forEach(col => {
+        tableHTML += `<th>${col.label}</th>`;
       });
       tableHTML += "</tr>";
-    });
 
-    table.innerHTML = tableHTML;
-  })
-  .catch(err => {
-    console.error("Error loading Google Sheet data:", err);
-  });
+      json.table.rows.forEach(row => {
+        tableHTML += "<tr>";
+        row.c.forEach((cell, index) => {
+          let value = cell ? cell.v : "";
+
+          // Format Date
+          if (index === 0 && cell?.f) {
+            value = new Date(cell.f).toLocaleDateString("en-GB");
+          }
+
+          // Format Time
+          if (index === 1 && typeof value === "string") {
+            const match = value.match(/Date\((\d+),(\d+),(\d+),(\d+),(\d+),(\d+)\)/);
+            if (match) {
+              const d = new Date(
+                match[1], match[2], match[3],
+                match[4], match[5], match[6]
+              );
+              value = d.toLocaleTimeString();
+            }
+          }
+
+          tableHTML += `<td>${value}</td>`;
+        });
+        tableHTML += "</tr>";
+      });
+
+      table.innerHTML = tableHTML;
+    })
+    .catch(err => console.error("Error loading Google Sheet data:", err));
+}
+
+// Load immediately
+loadData();
+
+// Refresh every 1 minute (60000ms)
+setInterval(loadData, 60000);
 </script>
 
 </body>
