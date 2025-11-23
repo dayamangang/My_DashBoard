@@ -1,123 +1,104 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>IoT Dashboard – Charts View</title>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      margin: 20px;
-      background: #f5f8ff;
-    }
-    h1 {
-      text-align: center;
-      color: #003d99;
-      margin-bottom: 10px;
-    }
-    h2 {
-      color: #003d99;
-      margin-top: 30px;
-      margin-bottom: 10px;
-    }
-    .updated-time {
-      text-align: center;
-      font-size: 0.9rem;
-      color: #555;
-      margin-bottom: 20px;
-    }
-    .chart-container {
-      max-width: 1100px;
-      margin: 0 auto 40px auto;
-      background: #ffffff;
-      padding: 15px;
-      border-radius: 10px;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.08);
-    }
-    canvas {
-      width: 100% !important;
-      height: 350px !important;
-    }
-  </style>
-  <!-- Chart.js CDN -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<meta charset="UTF-8">
+<title>IoT-based Aquaponic Dashboard</title>
+
+<style>
+  body { font-family: Arial, sans-serif; margin: 20px; background: #eaf4ff; }
+  h1 { text-align: center; color: #0047b3; margin-bottom: 5px; font-size: 30px; font-weight: bold; }
+  h2 { text-align: center; color: #003d99; font-size: 20px; margin-bottom: 10px; }
+  .updated-time { text-align: center; font-size: 12px; color: #555; margin-bottom: 5px; }
+  .credit { text-align: center; font-size: 12px; color: #444; margin-bottom: 20px; }
+
+  .chart-container {
+    width: 95%;
+    max-width: 1000px;
+    margin: 0 auto 30px auto;
+    background: white;
+    padding: 12px;
+    border-radius: 12px;
+    box-shadow: 0 3px 10px rgba(0,0,0,0.12);
+  }
+  canvas {
+    width: 100% !important;
+    height: 360px !important;
+  }
+
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
 
 <h1>IoT-based Aquaponic Dashboard</h1>
-<div class="updated-time" id="updatedTime">Loading data…</div>
-<p style="text-align:center; font-size:12px; color:#444; margin-top:4px;">
-    Developed by <strong>Dr. Huidrom Dayananda Singh</strong>
-</p>
+<div class="updated-time" id="updatedTime">Loading latest readings...</div>
+<p class="credit"><strong>Developed by Dr. Huidrom Dayananda Singh</strong></p>
 
 <div class="chart-container">
-  <h2>Latest Reading – All Parameters</h2>
+  <h2>Latest Value (All Parameters)</h2>
   <canvas id="latestChart"></canvas>
 </div>
 
 <div class="chart-container">
-  <h2>Air Temperature – Last 12 Hours</h2>
+  <h2>Air Temperature Trend (Last 12 Hours)</h2>
   <canvas id="airTempChart"></canvas>
 </div>
 
 <div class="chart-container">
-  <h2>Air Humidity – Last 12 Hours</h2>
+  <h2>Air Humidity Trend (Last 12 Hours)</h2>
   <canvas id="humidityChart"></canvas>
 </div>
 
 <div class="chart-container">
-  <h2>Water Temperature – Last 12 Hours</h2>
+  <h2>Water Temperature Trend (Last 12 Hours)</h2>
   <canvas id="waterTempChart"></canvas>
 </div>
 
 <div class="chart-container">
-  <h2>NPK – Last 12 Hours</h2>
+  <h2>NPK Trend (Last 12 Hours)</h2>
   <canvas id="npkChart"></canvas>
 </div>
 
 <script>
-const sheetID = "1xfkdl2oWvB-HSpLBRwjj31YBCb-YDTUhjTJhVnW2o_g";
-const sheetName = "Sheet1"; // change if your tab name is different
+// Google Sheet setup
+const sheetID = "1xfkdl2oWvB-HSpLBRwjj31YBCb-YDTUhjTJhVnW2o_g"; 
+const sheetName = "Sheet1";
 const apiURL = `https://docs.google.com/spreadsheets/d/${sheetID}/gviz/tq?tqx=out:json&sheet=${sheetName}`;
 
-// Chart references
+// Chart instances
 let latestChart, airTempChart, humidityChart, waterTempChart, npkChart;
 
-function parseDateStr(str) {
-  if (!str || typeof str !== "string") return null;
-  const nums = str.match(/\d+/g);
-  if (!nums || nums.length < 3) return null;
-  const [y, m, d] = nums.map(Number);
-  // GViz "Date(2025,9,11)" already uses JS-style 0-based month
-  return new Date(y, m, d);
+// Fix zeros only for charts (Option C)
+function fixZerosForCharts(arr) {
+  const newArr = [...arr];
+  for (let i = 0; i < newArr.length; i++) {
+    if (newArr[i] === 0 || isNaN(newArr[i])) {
+      let prev = null, next = null;
+
+      for (let p = i - 1; p >= 0; p--) {
+        if (newArr[p] !== 0 && !isNaN(newArr[p])) { prev = newArr[p]; break; }
+      }
+      for (let n = i + 1; n < newArr.length; n++) {
+        if (newArr[n] !== 0 && !isNaN(newArr[n])) { next = newArr[n]; break; }
+      }
+
+      if (prev !== null && next !== null) newArr[i] = (prev + next) / 2; 
+      else if (prev !== null) newArr[i] = prev;
+      else if (next !== null) newArr[i] = next;
+    }
+  }
+  return newArr;
 }
 
-function parseTimeStr(str, baseDate) {
-  if (!str || typeof str !== "string" || !str.startsWith("Date(") || !baseDate) return baseDate;
-  const nums = str.match(/\d+/g);
-  if (!nums || nums.length < 6) return baseDate;
-  const hh = Number(nums[3]);
-  const mm = Number(nums[4]);
-  const ss = Number(nums[5]);
-  const d = new Date(baseDate);
-  d.setHours(hh, mm, ss, 0);
-  return d;
-}
+function parseDateTime(d, t) {
+  const dn = d.match(/\d+/g); if (!dn) return null;
+  const date = new Date(+dn[0], +dn[1], +dn[2]);
 
-function combineDateTime(dateStr, timeStr) {
-  let d = parseDateStr(dateStr);
-  if (!d) return null;
-  d = parseTimeStr(timeStr, d);
-  return d;
-}
-
-function formatLabelFor24h(d) {
-  if (!d) return "";
-  // dd/MM HH:mm
-  const day = String(d.getDate()).padStart(2, "0");
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const hours = String(d.getHours()).padStart(2, "0");
-  const mins = String(d.getMinutes()).padStart(2, "0");
-  return `${day}/${month} ${hours}:${mins}`;
+  const tn = t?.match(/\d+/g);
+  if (tn) date.setHours(+tn[3], +tn[4], +tn[5]);
+  
+  return date;
 }
 
 function loadData() {
@@ -125,259 +106,100 @@ function loadData() {
     .then(res => res.text())
     .then(text => {
       const json = JSON.parse(text.substring(47).slice(0, -2));
-
       const rows = json.table.rows;
-      if (!rows || rows.length === 0) {
-        console.error("No data rows found");
-        return;
-      }
 
       const now = new Date();
       const cutoff = new Date(now.getTime() - 12 * 60 * 60 * 1000);
 
-      const labels24 = [];
-      const airTemp24 = [];
-      const humidity24 = [];
-      const waterTemp24 = [];
-      const n24 = [];
-      const p24 = [];
-      const k24 = [];
-
       let lastRecord = null;
+      const labels=[], airT=[], hum=[], wT=[], N=[], P=[], K=[];
 
       rows.forEach(row => {
         const c = row.c;
-
-        const dateStr = c[0] ? c[0].v : null;
-        const timeStr = c[1] ? c[1].v : null;
-        const ts = combineDateTime(dateStr, timeStr);
+        const ts = parseDateTime(c[0]?.v, c[1]?.v);
         if (!ts) return;
 
-        // build last record (most recent in sheet)
         lastRecord = {
           ts,
-          airTemp: parseFloat(c[2]?.v ?? NaN),
-          humidity: parseFloat(c[3]?.v ?? NaN),
-          waterTemp: parseFloat(c[4]?.v ?? NaN),
-          n: parseFloat(c[5]?.v ?? NaN),
-          p: parseFloat(c[6]?.v ?? NaN),
-          k: parseFloat(c[7]?.v ?? NaN),
-          tN: parseFloat(c[8]?.v ?? NaN),
-          tP: parseFloat(c[9]?.v ?? NaN),
-          tK: parseFloat(c[10]?.v ?? NaN)
+          airTemp: +c[2]?.v,
+          humidity: +c[3]?.v,
+          waterTemp: +c[4]?.v,
+          n: +c[5]?.v, p: +c[6]?.v, k: +c[7]?.v,
+          tN: +c[8]?.v, tP: +c[9]?.v, tK: +c[10]?.v
         };
 
-        // collect last 12h data
-        if (ts >= cutoff && ts <= now) {
-          labels24.push(formatLabelFor24h(ts));
-          airTemp24.push(parseFloat(c[2]?.v ?? NaN));
-          humidity24.push(parseFloat(c[3]?.v ?? NaN));
-          waterTemp24.push(parseFloat(c[4]?.v ?? NaN));
-          n24.push(parseFloat(c[5]?.v ?? NaN));
-          p24.push(parseFloat(c[6]?.v ?? NaN));
-          k24.push(parseFloat(c[7]?.v ?? NaN));
+        if (ts >= cutoff) {
+          labels.push(ts.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}));
+          airT.push(lastRecord.airTemp);
+          hum.push(lastRecord.humidity);
+          wT.push(lastRecord.waterTemp);
+          N.push(lastRecord.n); P.push(lastRecord.p); K.push(lastRecord.k);
         }
       });
 
-      if (!lastRecord) {
-        console.error("No valid last record found");
-        return;
-      }
+      if (!lastRecord) return;
 
-      // Update last updated time text
       document.getElementById("updatedTime").innerText =
         "Last updated: " + lastRecord.ts.toLocaleString();
 
-      renderLatestChart(lastRecord);
-      render24hCharts(labels24, airTemp24, humidity24, waterTemp24, n24, p24, k24);
-    })
-    .catch(err => {
-      console.error("Error loading Google Sheet data:", err);
+      renderLatest(lastRecord);
+      renderTrends(labels,
+        fixZerosForCharts(airT),
+        fixZerosForCharts(hum),
+        fixZerosForCharts(wT),
+        fixZerosForCharts(N),
+        fixZerosForCharts(P),
+        fixZerosForCharts(K));
     });
 }
 
-function renderLatestChart(last) {
-  const labels = [
-    "Air Temp (°C)",
-    "Air Humidity (%)",
-    "Water Temp (°C)",
-    "N (mg/kg)",
-    "P (mg/kg)",
-    "K (mg/kg)",
-    "tN (sec)",
-    "tP (sec)",
-    "tK (sec)"
-  ];
-
-  const data = [
-    last.airTemp,
-    last.humidity,
-    last.waterTemp,
-    last.n,
-    last.p,
-    last.k,
-    last.tN,
-    last.tP,
-    last.tK
-  ];
-
-  const ctx = document.getElementById("latestChart").getContext("2d");
+function renderLatest(r) {
+  const ctx = document.getElementById("latestChart");
   if (latestChart) latestChart.destroy();
 
   latestChart = new Chart(ctx, {
     type: "bar",
     data: {
-      labels: labels,
+      labels: ["Air Temp","Humidity","Water Temp","N","P","K","tN","tP","tK"],
       datasets: [{
-        label: "Latest Value",
-        data: data
+        label: "Latest Reading",
+        data: [r.airTemp,r.humidity,r.waterTemp,r.n,r.p,r.k,r.tN,r.tP,r.tK]
       }]
     },
-    options: {
-      responsive: true,
-      plugins: {
-        legend: { display: false },
-        title: {
-          display: false
-        }
-      },
-      scales: {
-        x: {
-          ticks: {
-            maxRotation: 60,
-            minRotation: 30
-          }
-        },
-        y: {
-          beginAtZero: true
-        }
-      }
-    }
+    options: { responsive:true }
   });
 }
 
-function render24hCharts(labels, air, hum, water, n, p, k) {
-  // Air Temp
-  const ctxAir = document.getElementById("airTempChart").getContext("2d");
-  if (airTempChart) airTempChart.destroy();
-  airTempChart = new Chart(ctxAir, {
-    type: "line",
-    data: {
-      labels: labels,
-      datasets: [{
-        label: "Air Temp (°C)",
-        data: air,
-        fill: false
-      }]
-    },
-    options: {
-      responsive: true,
-      plugins: {
-        legend: { display: true }
-      },
-      scales: {
-        x: { ticks: { maxTicksLimit: 8 } },
-        y: { beginAtZero: false }
-      }
-    }
-  });
-
-  // Humidity
-  const ctxHum = document.getElementById("humidityChart").getContext("2d");
-  if (humidityChart) humidityChart.destroy();
-  humidityChart = new Chart(ctxHum, {
-    type: "line",
-    data: {
-      labels: labels,
-      datasets: [{
-        label: "Air Humidity (%)",
-        data: hum,
-        fill: false
-      }]
-    },
-    options: {
-      responsive: true,
-      plugins: {
-        legend: { display: true }
-      },
-      scales: {
-        x: { ticks: { maxTicksLimit: 8 } },
-        y: { beginAtZero: false }
-      }
-    }
-  });
-
-  // Water Temp
-  const ctxWater = document.getElementById("waterTempChart").getContext("2d");
-  if (waterTempChart) waterTempChart.destroy();
-  waterTempChart = new Chart(ctxWater, {
-    type: "line",
-    data: {
-      labels: labels,
-      datasets: [{
-        label: "Water Temp (°C)",
-        data: water,
-        fill: false
-      }]
-    },
-    options: {
-      responsive: true,
-      plugins: {
-        legend: { display: true }
-      },
-      scales: {
-        x: { ticks: { maxTicksLimit: 8 } },
-        y: { beginAtZero: false }
-      }
-    }
-  });
-
-  // NPK
-  const ctxNPK = document.getElementById("npkChart").getContext("2d");
-  if (npkChart) npkChart.destroy();
-  npkChart = new Chart(ctxNPK, {
-    type: "line",
-    data: {
-      labels: labels,
-      datasets: [
-        {
-          label: "N (mg/kg)",
-          data: n,
-          fill: false
-        },
-        {
-          label: "P (mg/kg)",
-          data: p,
-          fill: false
-        },
-        {
-          label: "K (mg/kg)",
-          data: k,
-          fill: false
-        }
+function renderTrends(lbl, air, humi, wat, n, p, k) {
+  function makeChart(id, label, data, fill=false) {
+    const c = document.getElementById(id);
+    if (window[id]) window[id].destroy();
+    window[id] = new Chart(c, {
+      type: "line",
+      data: { labels: lbl, datasets: [{ label, data, fill }] },
+      options: { responsive:true }
+    });
+  }
+  makeChart("airTempChart","°C",air);
+  makeChart("humidityChart","%",humi);
+  makeChart("waterTempChart","°C",wat);
+  new Chart(document.getElementById("npkChart"),{
+    type:"line",
+    data:{
+      labels:lbl,
+      datasets:[
+        {label:"N",data:n,fill:false},
+        {label:"P",data:p,fill:false},
+        {label:"K",data:k,fill:false}
       ]
     },
-    options: {
-      responsive: true,
-      plugins: {
-        legend: { display: true }
-      },
-      scales: {
-        x: { ticks: { maxTicksLimit: 8 } },
-        y: { beginAtZero: true }
-      }
-    }
+    options:{responsive:true}
   });
 }
 
-// Initial load
 loadData();
-
-// Refresh every 1 minute (60000 ms)
 setInterval(loadData, 60000);
 </script>
 
 </body>
 </html>
-
-
