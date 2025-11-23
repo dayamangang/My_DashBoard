@@ -55,22 +55,22 @@
 </div>
 
 <div class="chart-container">
-  <h2>Air Temperature – Last 24 Hours</h2>
+  <h2>Air Temperature – Last 12 Hours</h2>
   <canvas id="airTempChart"></canvas>
 </div>
 
 <div class="chart-container">
-  <h2>Air Humidity – Last 24 Hours</h2>
+  <h2>Air Humidity – Last 12 Hours</h2>
   <canvas id="humidityChart"></canvas>
 </div>
 
 <div class="chart-container">
-  <h2>Water Temperature – Last 24 Hours</h2>
+  <h2>Water Temperature – Last 12 Hours</h2>
   <canvas id="waterTempChart"></canvas>
 </div>
 
 <div class="chart-container">
-  <h2>NPK – Last 24 Hours</h2>
+  <h2>NPK – Last 12 Hours</h2>
   <canvas id="npkChart"></canvas>
 </div>
 
@@ -133,7 +133,7 @@ function loadData() {
       }
 
       const now = new Date();
-      const cutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      const cutoff = new Date(now.getTime() - 12 * 60 * 60 * 1000);
 
       const labels24 = [];
       const airTemp24 = [];
@@ -167,7 +167,7 @@ function loadData() {
           tK: parseFloat(c[10]?.v ?? NaN)
         };
 
-        // collect last 24h data
+        // collect last 12h data
         if (ts >= cutoff && ts <= now) {
           labels24.push(formatLabelFor24h(ts));
           airTemp24.push(parseFloat(c[2]?.v ?? NaN));
@@ -379,4 +379,5 @@ setInterval(loadData, 60000);
 
 </body>
 </html>
+
 
