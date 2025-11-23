@@ -1,65 +1,63 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Google Sheet Data Display</title>
-  <style>
-    table {
-      width: 100%;
-      border-collapse: collapse;
-    }
-    th, td {
-      padding: 10px;
-      border: 1px solid #444;
-      text-align: center;
-    }
-    th {
-      background: #0073e6;
-      color: white;
-    }
-  </style>
+<meta charset="UTF-8">
+<title>Google Sheet Live Data</title>
+<style>
+  body { font-family: Arial, sans-serif; margin: 20px; }
+  h2 { text-align: center; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+  }
+  th, td {
+    border: 1px solid #444;
+    padding: 10px;
+    text-align: center;
+  }
+  th {
+    background: #0073e6;
+    color: #fff;
+  }
+</style>
 </head>
 <body>
 
-  <h2>Live Data from Google Sheet</h2>
-  <table id="dataTable"></table>
+<h2>Live IoT Dashboard Data</h2>
+<table id="dataTable"></table>
 
-  <script>
-    // This is your published Google Sheet link
-    const sheetURL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSn1KHVIlyp5lmQRLKwhQU3fRsr-r1eYA2Crp5hEPafGHr7cruKswNHOKS4oXk0wu7UHxIxF4gt0z4c/pubhtml";
+<script>
+const sheetID = "1xfkdl2oWvB-HSpLBRwjj31YBCb-YDTUhjTJhVnW2o_g"; 
+const sheetName = "Sheet1"; // Change if your tab name is different
+const apiURL = `https://docs.google.com/spreadsheets/d/${sheetID}/gviz/tq?tqx=out:json&sheet=${sheetName}`;
 
-    // Derive the Sheet ID part from your URL
-    const sheetID  = "2PACX-1vSn1KHVIlyp5lmQRLKwhQU3fRsr-r1eYA2Crp5hEPafGHr7cruKswNHOKS4oXk0wu7UHxIxF4gt0z4c";
-    const sheetName = "Sheet1";   // Change if your sheet tab is named differently
+fetch(apiURL)
+  .then(res => res.text())
+  .then(text => {
+    const json = JSON.parse(text.substr(47).slice(0, -2));
+    const table = document.getElementById("dataTable");
 
-    const apiURL = `https://docs.google.com/spreadsheets/d/${sheetID}/gviz/tq?tqx=out:json&sheet=${sheetName}`;
+    let tableHTML = "<tr>";
+    json.table.cols.forEach(col => {
+      tableHTML += `<th>${col.label}</th>`;
+    });
+    tableHTML += "</tr>";
 
-    fetch(apiURL)
-      .then(res => res.text())
-      .then(text => {
-        const json = JSON.parse(text.substr(47).slice(0, -2));
-        const table = document.getElementById("dataTable");
-
-        let html = "<tr>";
-        json.table.cols.forEach(col => {
-          html += `<th>${col.label}</th>`;
-        });
-        html += "</tr>";
-
-        json.table.rows.forEach(row => {
-          html += "<tr>";
-          row.c.forEach(cell => {
-            html += `<td>${cell ? cell.v : ""}</td>`;
-          });
-          html += "</tr>";
-        });
-
-        table.innerHTML = html;
-      })
-      .catch(err => {
-        console.error("Error loading Google Sheet data:", err);
+    json.table.rows.forEach(row => {
+      tableHTML += "<tr>";
+      row.c.forEach(cell => {
+        tableHTML += `<td>${cell ? cell.v : ""}</td>`;
       });
-  </script>
+      tableHTML += "</tr>";
+    });
+
+    table.innerHTML = tableHTML;
+  })
+  .catch(err => {
+    console.error("Error loading Google Sheet data:", err);
+  });
+</script>
 
 </body>
 </html>
