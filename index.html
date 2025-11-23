@@ -43,8 +43,12 @@
 </head>
 <body>
 
-<h1>Live IoT Sensor Dashboard</h1>
+<h1>IoT-based Aquaponic Dashboard</h1>
 <div class="updated-time" id="updatedTime">Loading data…</div>
+<p style="text-align:center; font-size:12px; color:#444; margin-top:4px;">
+    Developed by <strong>Dr. Huidrom Dayananda Singh</strong>
+</p>
+
 
 <div class="chart-container">
   <h2>Latest Reading – All Parameters</h2>
@@ -52,22 +56,22 @@
 </div>
 
 <div class="chart-container">
-  <h2>Air Temperature – Last 24 Hours</h2>
+  <h2>Air Temperature – Last 12 Hours</h2>
   <canvas id="airTempChart"></canvas>
 </div>
 
 <div class="chart-container">
-  <h2>Air Humidity – Last 24 Hours</h2>
+  <h2>Air Humidity – Last 12 Hours</h2>
   <canvas id="humidityChart"></canvas>
 </div>
 
 <div class="chart-container">
-  <h2>Water Temperature – Last 24 Hours</h2>
+  <h2>Water Temperature – Last 12 Hours</h2>
   <canvas id="waterTempChart"></canvas>
 </div>
 
 <div class="chart-container">
-  <h2>NPK – Last 24 Hours</h2>
+  <h2>NPK – Last 12 Hours</h2>
   <canvas id="npkChart"></canvas>
 </div>
 
@@ -130,7 +134,7 @@ function loadData() {
       }
 
       const now = new Date();
-      const cutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      const cutoff = new Date(now.getTime() - 12 * 60 * 60 * 1000);
 
       const labels24 = [];
       const airTemp24 = [];
@@ -376,3 +380,4 @@ setInterval(loadData, 60000);
 
 </body>
 </html>
+
