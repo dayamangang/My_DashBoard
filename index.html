@@ -231,7 +231,7 @@
       <span class="loading-spinner">Loading data</span>
       <span class="status-badge status-online">LIVE</span>
     </div>
-    <p class="credit">Developed by Dr. Huidrom Dayananda Singh | Agricultural Engineering Research</p>
+    <p class="credit">Developed by Dr. Huidrom Dayananda Singh | Division of System Research Engineering, ICAR, Umiam, Meghalaya</p>
   </header>
 
   <div class="stats-grid" id="statsGrid">
@@ -264,7 +264,7 @@
   </div>
 
   <footer>
-    IoT Aquaponic System © 2025 | Powered by Smart Agriculture Technology
+    IoT Aquaponic System © 2025 | Funded by AICRP on Plastic Engineering in Agriculture, Structure, and Environment Management (PEASEM)
   </footer>
 </div>
 
@@ -303,9 +303,9 @@ function fixZeros(arr) {
 function parseDateTime(d, t) {
   const dn = d?.match(/\d+/g);
   if (!dn) return null;
-  let dt = new Date(+dn[0], +dn[1] - 1, +dn[2]);
+  let dt = new Date(+dn[0], +dn[1], +dn[2]);
   const tn = t?.match(/\d+/g);
-  if (tn && tn.length >= 6) dt.setHours(+tn[3], +tn[4], +tn[5]);
+  if (tn && tn.length >= 3) dt.setHours(+tn[3], +tn[4], +tn[5]);
   return dt;
 }
 
@@ -630,3 +630,4 @@ setInterval(loadData, 60000); // Refresh every minute
 
 </body>
 </html>
+
