@@ -78,6 +78,11 @@
       color: white;
     }
 
+    .status-fallback {
+      background: #ed8936;
+      color: white;
+    }
+
     .credit {
       text-align: center;
       font-size: 14px;
@@ -159,11 +164,19 @@
       box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
       margin-bottom: 30px;
       transition: transform 0.3s ease;
+      position: relative;
     }
 
     .chart-container:hover {
       transform: translateY(-3px);
       box-shadow: 0 12px 30px rgba(0, 0, 0, 0.2);
+    }
+
+    .chart-note {
+      font-size: 12px;
+      color: #ed8936;
+      font-weight: 600;
+      margin-bottom: 10px;
     }
 
     h2 {
@@ -244,22 +257,26 @@
   </div>
 
   <div class="chart-container">
-    <h2>🌡️ Air Temperature Trend (Last 12 Hours)</h2>
+    <div class="chart-note" id="airTempNote" style="display:none;"></div>
+    <h2>🌡️ Air Temperature Trend<span id="airTempRangeLabel"> (Last 12 Hours)</span></h2>
     <canvas id="airTempChart"></canvas>
   </div>
 
   <div class="chart-container">
-    <h2>💧 Air Humidity Trend (Last 12 Hours)</h2>
+    <div class="chart-note" id="humidityNote" style="display:none;"></div>
+    <h2>💧 Air Humidity Trend<span id="humidityRangeLabel"> (Last 12 Hours)</span></h2>
     <canvas id="humidityChart"></canvas>
   </div>
 
   <div class="chart-container">
-    <h2>🌊 Water Temperature Trend (Last 12 Hours)</h2>
+    <div class="chart-note" id="waterTempNote" style="display:none;"></div>
+    <h2>🌊 Water Temperature Trend<span id="waterTempRangeLabel"> (Last 12 Hours)</span></h2>
     <canvas id="waterTempChart"></canvas>
   </div>
 
   <div class="chart-container">
-    <h2>🧪 NPK Nutrient Levels (Last 12 Hours)</h2>
+    <div class="chart-note" id="npkNote" style="display:none;"></div>
+    <h2>🧪 NPK Nutrient Levels<span id="npkRangeLabel"> (Last 12 Hours)</span></h2>
     <canvas id="npkChart"></canvas>
   </div>
 
@@ -272,6 +289,10 @@
 const sheetID = "1xfkdl2oWvB-HSpLBRwjj31YBCb-YDTUhjTJhVnW2o_g";
 const sheetName = "Sheet1";
 const apiURL = `https://docs.google.com/spreadsheets/d/${sheetID}/gviz/tq?tqx=out:json&sheet=${sheetName}`;
+
+// How many most-recent rows to fall back to if the 12h window comes up empty
+// (e.g. device clock is off, or timestamps otherwise don't line up with "now").
+const FALLBACK_ROW_COUNT = 60;
 
 let latestChart, airTempChart, humidityChart, waterTempChart, npkChart;
 
@@ -300,33 +321,82 @@ function fixZeros(arr) {
   return fixed;
 }
 
+// ---- FIXED: robust date/time parsing -------------------------------------
+// gviz can return a DATE cell as "Date(Y,M,D)" (6 or 3 numbers, month 0-based)
+// but a TIME-OF-DAY cell can come back either as the same wrapped form
+// "Date(1899,11,30,H,Mi,S)" (6 numbers) OR as a plain string like "14:30:00"
+// (only 2-3 numbers). The original code always read hour/min/sec from
+// indices [3],[4],[5], which are undefined for a plain "HH:MM:SS" string —
+// that silently produced an Invalid Date. An Invalid Date is still truthy,
+// so the row wasn't skipped (which is why the latest-values stat cards kept
+// working), but "ts >= cutoff" is always false against an Invalid Date, so
+// nothing ever made it into the 12-hour trend arrays.
 function parseDateTime(d, t) {
   const dn = d?.match(/\d+/g);
-  if (!dn) return null;
-  let dt = new Date(+dn[0], +dn[1], +dn[2]);
-  const tn = t?.match(/\d+/g);
-  if (tn && tn.length >= 3) dt.setHours(+tn[3], +tn[4], +tn[5]);
-  return dt;
+  if (!dn || dn.length < 3) return null;
+
+  const year = +dn[0], month = +dn[1], day = +dn[2];
+  let hours = 0, minutes = 0, seconds = 0;
+
+  if (t !== undefined && t !== null && t !== '') {
+    const tn = String(t).match(/\d+/g);
+    if (tn) {
+      if (tn.length >= 6) {
+        // wrapped gviz "Date(Y,M,D,H,Mi,S)" time-of-day value
+        hours = +tn[3]; minutes = +tn[4]; seconds = +tn[5];
+      } else if (tn.length >= 2) {
+        // plain "HH:MM" or "HH:MM:SS" string
+        hours = +tn[0]; minutes = +tn[1]; seconds = tn[2] !== undefined ? +tn[2] : 0;
+      }
+    }
+  }
+
+  const dt = new Date(year, month, day, hours, minutes, seconds);
+  return isNaN(dt.getTime()) ? null : dt;
 }
+// ---------------------------------------------------------------------------
 
 function loadData() {
   fetch(apiURL)
-    .then(res => res.text())
+    .then(res => {
+      if (!res.ok) throw new Error(`HTTP ${res.status} fetching sheet (check sharing settings / sheet ID)`);
+      return res.text();
+    })
     .then(text => {
-      const json = JSON.parse(text.substring(47).slice(0, -2));
+      // Robustly strip the gviz JS wrapper instead of relying on a fixed
+      // character offset, which breaks if Google's response formatting
+      // shifts even slightly. If the sheet isn't publicly shared, Google
+      // returns an HTML page here instead of the expected wrapper, and
+      // this match will fail with a clear error rather than a cryptic
+      // JSON.parse crash.
+      const match = text.match(/google\.visualization\.Query\.setResponse\(([\s\S]*)\);?\s*$/);
+      if (!match) {
+        throw new Error('Unexpected response from Google Sheets — the sheet may not be shared publicly ("Anyone with the link — Viewer"), or the sheet ID/name is wrong.');
+      }
+
+      const json = JSON.parse(match[1]);
+
+      if (json.status === 'error') {
+        const msg = (json.errors && json.errors[0] && json.errors[0].detailed_message) || 'Unknown gviz error';
+        throw new Error(`Google Sheets query error: ${msg}`);
+      }
+
       const rows = json.table.rows;
       const now = new Date();
       const cutoff = new Date(now.getTime() - 12 * 60 * 60 * 1000);
 
-      const labels = [], air = [], hum = [], wat = [], n = [], p = [], k = [];
+      // Parse every row once up front so we can both filter by cutoff
+      // and fall back to "most recent N rows" if the cutoff window is empty.
+      const parsed = [];
       let lastRecord = null;
+      let unparseableCount = 0;
 
       rows.forEach(row => {
         const c = row.c;
         const ts = parseDateTime(c[0]?.v, c[1]?.v);
-        if (!ts) return;
+        if (!ts) { unparseableCount++; return; }
 
-        lastRecord = {
+        const record = {
           ts,
           airTemp: +c[2]?.v || 0,
           humidity: +c[3]?.v || 0,
@@ -339,25 +409,59 @@ function loadData() {
           tK: +c[10]?.v || 0
         };
 
-        if (ts >= cutoff) {
-          labels.push(ts.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}));
-          air.push(lastRecord.airTemp);
-          hum.push(lastRecord.humidity);
-          wat.push(lastRecord.waterTemp);
-          n.push(lastRecord.n);
-          p.push(lastRecord.p);
-          k.push(lastRecord.k);
-        }
+        parsed.push(record);
+        lastRecord = record; // last row with a valid timestamp
       });
 
-      if (!lastRecord) return;
+      if (!lastRecord) {
+        console.warn(`No rows had a parseable timestamp (${unparseableCount} unparseable). Check the Date/Time column format in the sheet.`);
+        document.getElementById("updatedTime").innerHTML =
+          '<span style="color: #ef4444;">No valid timestamped data found. Retrying...</span>';
+        return;
+      }
+
+      if (unparseableCount > 0) {
+        console.warn(`${unparseableCount} row(s) had an unparseable date/time and were skipped.`);
+      }
+
+      // Rows within the 12h window
+      let windowRows = parsed.filter(r => r.ts >= cutoff);
+      let usedFallback = false;
+
+      if (windowRows.length === 0) {
+        // Nothing fell inside the 12h window — most likely a clock-drift /
+        // timezone mismatch between the device and the browser rather than
+        // "no data". Fall back to the most recent N rows so the trend
+        // charts aren't left blank.
+        console.warn(
+          `No rows fell inside the last 12 hours (now=${now.toISOString()}, cutoff=${cutoff.toISOString()}, ` +
+          `latest row ts=${lastRecord.ts.toISOString()}). Falling back to the most recent ${FALLBACK_ROW_COUNT} rows. ` +
+          `This usually means the device clock/timezone doesn't match the browser's.`
+        );
+        windowRows = parsed.slice(-FALLBACK_ROW_COUNT);
+        usedFallback = true;
+      }
+
+      const labels = windowRows.map(r => r.ts.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}));
+      const air = windowRows.map(r => r.airTemp);
+      const hum = windowRows.map(r => r.humidity);
+      const wat = windowRows.map(r => r.waterTemp);
+      const n = windowRows.map(r => r.n);
+      const p = windowRows.map(r => r.p);
+      const k = windowRows.map(r => r.k);
 
       const airFix = fixZeros(air);
       const humFix = fixZeros(hum);
       const watFix = fixZeros(wat);
 
+      const statusBadge = usedFallback
+        ? '<span class="status-badge status-fallback">SHOWING LATEST DATA (clock mismatch?)</span>'
+        : '<span class="status-badge status-online">LIVE</span>';
+
       document.getElementById("updatedTime").innerHTML =
-        `Last updated: ${lastRecord.ts.toLocaleString()} <span class="status-badge status-online">LIVE</span>`;
+        `Last updated: ${lastRecord.ts.toLocaleString()} ${statusBadge}`;
+
+      toggleChartNote(usedFallback);
 
       renderStats(lastRecord);
       renderLatest(lastRecord);
@@ -365,9 +469,23 @@ function loadData() {
     })
     .catch(err => {
       console.error('Error loading data:', err);
-      document.getElementById("updatedTime").innerHTML = 
-        '<span style="color: #ef4444;">Error loading data. Retrying...</span>';
+      document.getElementById("updatedTime").innerHTML =
+        `<span style="color: #ef4444;">Error loading data: ${err.message || err}. Retrying...</span>`;
     });
+}
+
+function toggleChartNote(usedFallback) {
+  const noteText = 'No readings fell inside the last 12 hours (likely a device clock/timezone mismatch) — showing the most recent available readings instead.';
+  const rangeText = usedFallback ? ' (Most Recent Readings)' : ' (Last 12 Hours)';
+  ['airTemp', 'humidity', 'waterTemp', 'npk'].forEach(key => {
+    const note = document.getElementById(`${key}Note`);
+    const rangeLabel = document.getElementById(`${key}RangeLabel`);
+    if (note) {
+      note.style.display = usedFallback ? 'block' : 'none';
+      note.textContent = usedFallback ? noteText : '';
+    }
+    if (rangeLabel) rangeLabel.textContent = rangeText;
+  });
 }
 
 function renderStats(r) {
@@ -630,8 +748,3 @@ setInterval(loadData, 60000); // Refresh every minute
 
 </body>
 </html>
-
-
-
-
-
